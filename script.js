@@ -489,12 +489,11 @@ async function loadInitialMessages() {
   DOM.chatEmptyState.style.display = 'none';
 
   try {
-    // Paginate messages: Load latest 50 messages
+    // Load all active messages in chronological order (No row limits!)
     const { data: messages, error } = await state.supabase
       .from('messages')
       .select('*')
-      .order('created_at', { ascending: true })
-      .limit(50);
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
 
@@ -970,17 +969,17 @@ function handlePhotoSelected(event) {
   if (!file) return;
 
   // Validate File Type
-  const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!validMimes.includes(file.type)) {
-    alert('Only JPG, PNG, and WebP photos are supported in our private sanctuary.');
+  const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+  if (file.type && !validMimes.includes(file.type)) {
+    alert('Please select an image file (JPG, PNG, WebP, GIF, HEIC).');
     DOM.photoFileInput.value = '';
     return;
   }
 
-  // Validate Max File Size: 5 MB
-  const maxBytes = 5 * 1024 * 1024;
+  // Max File Size: 50 MB (Supabase maximum)
+  const maxBytes = 50 * 1024 * 1024;
   if (file.size > maxBytes) {
-    alert('Photo exceeds the 5 MB limit. Please select a smaller photo.');
+    alert('Photo exceeds the 50 MB limit. Please select a photo under 50 MB.');
     DOM.photoFileInput.value = '';
     return;
   }
