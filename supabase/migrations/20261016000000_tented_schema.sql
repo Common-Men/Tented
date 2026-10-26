@@ -265,7 +265,7 @@ AS $$
     SELECT id, image_path 
     FROM public.expired_photo_queue 
     WHERE status = 'pending'
-    LIMIT 20;
+    LIMIT 500;
 $$;
 
 CREATE OR REPLACE FUNCTION public.mark_photos_cleaned(p_ids UUID[])
@@ -415,13 +415,13 @@ VALUES (
     'couple-photos',
     'couple-photos',
     FALSE,
-    5242880, -- 5 MB in bytes
-    ARRAY['image/jpeg', 'image/png', 'image/webp']
+    52428800, -- 50 MB in bytes (Supabase maximum for Free Tier)
+    ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']
 )
 ON CONFLICT (id) DO UPDATE SET
     public = FALSE,
-    file_size_limit = 5242880,
-    allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp'];
+    file_size_limit = 52428800,
+    allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
 
 -- Storage RLS Policies on storage.objects
 -- Note: Enable RLS on storage.objects is handled by Supabase default.
