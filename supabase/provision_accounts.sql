@@ -52,3 +52,14 @@ SELECT
     cm.created_at
 FROM public.couple_members cm
 JOIN auth.users au ON au.id = cm.user_id;
+
+
+-- Provision Partner 1 & Partner 2
+INSERT INTO public.couple_members (user_id, role, display_name, avatar_emoji)
+VALUES 
+    ('REPLACE-WITH-YOUR-UUID', 'partner_1', 'My Love', '🤴'),
+    ('REPLACE-WITH-GIRLFRIEND-UUID', 'partner_2', 'My Queen', '👸')
+ON CONFLICT (user_id) DO UPDATE SET 
+    role = EXCLUDED.role,
+    display_name = EXCLUDED.display_name,
+    avatar_emoji = EXCLUDED.avatar_emoji;

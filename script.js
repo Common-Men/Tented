@@ -326,9 +326,13 @@ async function handleUserAuthenticated(user) {
   // Query couple_members allowlist table. If current user is not in the allowlist,
   // deny access immediately, terminate auth session, and display warning.
   try {
+    console.log('Tented Auth: Verifying couple_members for User ID:', user.id, 'Email:', user.email);
+
     const { data: members, error } = await state.supabase
       .from('couple_members')
       .select('*');
+
+    console.log('Tented Auth: Fetch result:', { members, error });
 
     if (error) {
       console.error('Allowlist verification error:', error);
@@ -340,8 +344,9 @@ async function handleUserAuthenticated(user) {
     }
 
     if (!members || members.length === 0) {
+      console.warn('Tented Auth: No members returned from couple_members table! Check RLS policy or verify logged-in UID.');
       await state.supabase.auth.signOut();
-      showAuthAlert('Sanctuary Unconfigured: No authorized couple members found. Run the provisioning migration in Supabase.');
+      showAuthAlert('Sanctuary Unconfigured: No authorized couple members found. If rows exist in Supabase, update the RLS select policy on couple_members.');
       state.targetView = 'auth';
       if (state.isUnlocked) showView('auth');
       return;
@@ -349,8 +354,9 @@ async function handleUserAuthenticated(user) {
 
     const myProfile = members.find(m => m.user_id === user.id);
     if (!myProfile) {
+      console.warn('Tented Auth: Logged in user UID (' + user.id + ') does not match any couple_members row:', members);
       await state.supabase.auth.signOut();
-      showAuthAlert('Access Denied: This sanctuary is strictly restricted to the two authorized partners.');
+      showAuthAlert('Access Denied: Logged in account (' + (user.email || user.id) + ') is not registered in the couple allowlist.');
       state.targetView = 'auth';
       if (state.isUnlocked) showView('auth');
       return;

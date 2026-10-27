@@ -316,10 +316,12 @@ ALTER TABLE public.message_saves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expired_photo_queue ENABLE ROW LEVEL SECURITY;
 
 -- 8.1 couple_members Policies:
--- Only approved couple members can view the couple profiles
+-- Allow authenticated users to view couple profiles (app verifies membership against current user ID)
+DROP POLICY IF EXISTS "couple_members_select" ON public.couple_members;
 CREATE POLICY "couple_members_select"
     ON public.couple_members FOR SELECT
-    USING (public.is_couple_member(auth.uid()));
+    TO authenticated
+    USING (true);
 
 -- Members cannot insert/delete themselves (must be provisioned by admin/migration)
 CREATE POLICY "couple_members_insert"
