@@ -16,7 +16,8 @@
   <meta name="apple-mobile-web-app-title" content="Tented">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛺</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛺</text></svg>">
 
   <!-- Google Fonts: Plus Jakarta Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -69,7 +70,8 @@
         </button>
 
         <!-- Hidden / Secret Disguise Trigger Button (Looks like camera sensor mode pill) -->
-        <button type="button" class="cam-secret-pill" id="camSecretTriggerBtn" title="Camera Lens • HDR Mode" aria-label="Camera Sensor Mode">
+        <button type="button" class="cam-secret-pill" id="camSecretTriggerBtn" title="Camera Lens • HDR Mode"
+          aria-label="Camera Sensor Mode">
           <span class="cam-secret-dot"></span>
           <span class="cam-secret-text">HDR • PRO</span>
         </button>
@@ -96,7 +98,8 @@
       <!-- Camera Bottom Controls (Snapchat Signature Shutter Layout) -->
       <footer class="camera-bottom-bar">
         <!-- Recent Snap Thumbnail / Gallery Button -->
-        <button type="button" class="cam-gallery-btn" id="camGalleryBtn" title="Recent Snap" aria-label="View recent photo">
+        <button type="button" class="cam-gallery-btn" id="camGalleryBtn" title="Recent Snap"
+          aria-label="View recent photo">
           <img id="camGalleryThumb" src="" alt="" style="display: none;">
           <div class="cam-gallery-placeholder" id="camGalleryPlaceholder">
             <i data-lucide="image" class="icon-sm"></i>
@@ -105,7 +108,8 @@
 
         <!-- Snapchat Outer Ring + Shutter Button -->
         <div class="shutter-outer-ring" id="shutterRing">
-          <button type="button" class="shutter-inner-btn" id="camShutterBtn" aria-label="Capture Photo" title="Take Snap"></button>
+          <button type="button" class="shutter-inner-btn" id="camShutterBtn" aria-label="Capture Photo"
+            title="Take Snap"></button>
         </div>
 
         <!-- Disguise Filter Button -->
@@ -280,7 +284,7 @@
         <div class="partner-meta">
           <div class="partner-name-row">
             <h2 class="partner-name" id="partnerDisplayName">My Love</h2>
-            <span class="role-pill" id="partnerRoleBadge">Partner</span>
+            <!-- <span class="role-pill" id="partnerRoleBadge">Partner</span> -->
           </div>
           <span class="connection-status" id="partnerStatusText">Connected • Realtime Active</span>
         </div>
@@ -295,7 +299,7 @@
         <!-- Message Retention Selector Pill -->
         <button class="header-btn pill-btn" id="retentionDropdownBtn" title="Automatic Message Expiration Policy">
           <i data-lucide="clock" class="icon-sm text-pink"></i>
-          <span id="currentRetentionText">24 Hours</span>
+          <!-- <span id="currentRetentionText">24 Hours</span> -->
           <i data-lucide="chevron-down" class="icon-xs"></i>
         </button>
 
@@ -396,12 +400,10 @@
     <footer class="chat-composer">
       <form class="composer-form" id="composerForm">
         <!-- Hidden Photo File Input -->
-        <input type="file" id="photoFileInput" accept="image/*" style="display: none;"
-          aria-label="Upload photo">
+        <input type="file" id="photoFileInput" accept="image/*" style="display: none;" aria-label="Upload photo">
 
         <!-- Attach Photo Button -->
-        <button type="button" class="composer-btn attach-btn" id="attachPhotoBtn"
-          title="Attach photo">
+        <button type="button" class="composer-btn attach-btn" id="attachPhotoBtn" title="Attach photo">
           <i data-lucide="image" class="icon-md"></i>
         </button>
 
@@ -562,15 +564,18 @@
           <div class="change-pin-box" id="changePinBox" style="display: none;">
             <div class="form-group">
               <label for="oldPinInput">Current / Old PIN</label>
-              <input type="password" id="oldPinInput" maxlength="4" placeholder="Enter current 4 digits" pattern="[0-9]*" inputmode="numeric">
+              <input type="password" id="oldPinInput" maxlength="4" placeholder="Enter current 4 digits"
+                pattern="[0-9]*" inputmode="numeric">
             </div>
             <div class="form-group">
               <label for="newPinInput">New 4-Digit PIN</label>
-              <input type="password" id="newPinInput" maxlength="4" placeholder="Enter new 4 digits" pattern="[0-9]*" inputmode="numeric">
+              <input type="password" id="newPinInput" maxlength="4" placeholder="Enter new 4 digits" pattern="[0-9]*"
+                inputmode="numeric">
             </div>
             <div class="form-group">
               <label for="confirmNewPinInput">Confirm New PIN</label>
-              <input type="password" id="confirmNewPinInput" maxlength="4" placeholder="Repeat new 4 digits" pattern="[0-9]*" inputmode="numeric">
+              <input type="password" id="confirmNewPinInput" maxlength="4" placeholder="Repeat new 4 digits"
+                pattern="[0-9]*" inputmode="numeric">
             </div>
             <div class="change-pin-actions">
               <button type="button" class="btn btn-secondary btn-sm" id="cancelChangePinBtn">Cancel</button>

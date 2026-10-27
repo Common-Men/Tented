@@ -408,25 +408,27 @@ function handleUserLoggedOut() {
 
 function updateHeaderProfiles() {
   if (state.partnerProfile) {
-    DOM.partnerAvatar.textContent = state.partnerProfile.avatar_emoji || '👸';
-    DOM.partnerDisplayName.textContent = state.partnerProfile.display_name || 'My Love';
-    DOM.partnerRoleBadge.textContent = state.partnerProfile.role === 'partner_1' ? 'Partner 1' : 'Partner 2';
+    if (DOM.partnerAvatar) DOM.partnerAvatar.textContent = state.partnerProfile.avatar_emoji || '👸';
+    if (DOM.partnerDisplayName) DOM.partnerDisplayName.textContent = state.partnerProfile.display_name || 'My Love';
+    if (DOM.partnerRoleBadge) DOM.partnerRoleBadge.textContent = state.partnerProfile.role === 'partner_1' ? 'Partner 1' : 'Partner 2';
   } else {
-    DOM.partnerAvatar.textContent = '💖';
-    DOM.partnerDisplayName.textContent = 'Awaiting Partner';
-    DOM.partnerRoleBadge.textContent = 'Partner';
+    if (DOM.partnerAvatar) DOM.partnerAvatar.textContent = '💖';
+    if (DOM.partnerDisplayName) DOM.partnerDisplayName.textContent = 'Awaiting Partner';
+    if (DOM.partnerRoleBadge) DOM.partnerRoleBadge.textContent = 'Partner';
   }
 
   // Update Settings Modal
-  DOM.currentUserEmail.textContent = `Signed in as: ${state.currentUser.email}`;
-  DOM.currentUserRole.textContent = `Role: ${state.myProfile.role} (${state.myProfile.display_name})`;
-  DOM.settingsDisplayName.value = state.myProfile.display_name || '';
+  if (DOM.currentUserEmail) DOM.currentUserEmail.textContent = `Signed in as: ${state.currentUser.email}`;
+  if (DOM.currentUserRole) DOM.currentUserRole.textContent = `Role: ${state.myProfile.role} (${state.myProfile.display_name})`;
+  if (DOM.settingsDisplayName) DOM.settingsDisplayName.value = state.myProfile.display_name || '';
 
   // Highlight active avatar emoji in settings
-  const emojiBtns = DOM.emojiSelector.querySelectorAll('.emoji-btn');
-  emojiBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.emoji === state.myProfile.avatar_emoji);
-  });
+  if (DOM.emojiSelector) {
+    const emojiBtns = DOM.emojiSelector.querySelectorAll('.emoji-btn');
+    emojiBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.emoji === state.myProfile.avatar_emoji);
+    });
+  }
 }
 
 // =============================================================================
@@ -453,13 +455,15 @@ async function loadChatSettings() {
 
 function applyRetentionHours(hours) {
   state.retentionHours = Number(hours) || 24;
-  DOM.currentRetentionText.textContent = `${state.retentionHours} Hours`;
+  if (DOM.currentRetentionText) {
+    DOM.currentRetentionText.textContent = `${state.retentionHours} Hours`;
+  }
 
-  DOM.retentionOption24.classList.toggle('active', state.retentionHours === 24);
-  DOM.retentionOption72.classList.toggle('active', state.retentionHours === 72);
+  if (DOM.retentionOption24) DOM.retentionOption24.classList.toggle('active', state.retentionHours === 24);
+  if (DOM.retentionOption72) DOM.retentionOption72.classList.toggle('active', state.retentionHours === 72);
 
-  const check24 = DOM.retentionOption24.querySelector('.item-check');
-  const check72 = DOM.retentionOption72.querySelector('.item-check');
+  const check24 = DOM.retentionOption24 ? DOM.retentionOption24.querySelector('.item-check') : null;
+  const check72 = DOM.retentionOption72 ? DOM.retentionOption72.querySelector('.item-check') : null;
   if (check24) check24.style.display = state.retentionHours === 24 ? 'block' : 'none';
   if (check72) check72.style.display = state.retentionHours === 72 ? 'block' : 'none';
 }
@@ -589,9 +593,13 @@ function handlePresenceSync() {
   const isPartnerOnline = allPresences.some(p => p.user_id !== state.currentUser.id);
   state.partnerOnline = isPartnerOnline;
 
-  DOM.partnerOnlineDot.classList.toggle('online', isPartnerOnline);
-  DOM.partnerOnlineDot.classList.toggle('offline', !isPartnerOnline);
-  DOM.partnerStatusText.textContent = isPartnerOnline ? 'Together now • Realtime Live' : 'Away • Realtime Active';
+  if (DOM.partnerOnlineDot) {
+    DOM.partnerOnlineDot.classList.toggle('online', isPartnerOnline);
+    DOM.partnerOnlineDot.classList.toggle('offline', !isPartnerOnline);
+  }
+  if (DOM.partnerStatusText) {
+    DOM.partnerStatusText.textContent = isPartnerOnline ? 'Together now • Realtime Live' : 'Away • Realtime Active';
+  }
 }
 
 function handleIncomingMessage(newMsg) {
