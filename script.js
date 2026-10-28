@@ -43,7 +43,8 @@ const state = {
   cameraFacingMode: 'user', // 'user' (front) | 'environment' (back)
   cameraFlash: false,
   pinInput: '',
-  recentSnapUrl: null
+  recentSnapUrl: null,
+  lastHoldTriggerTime: 0
 };
 
 // =============================================================================
@@ -199,7 +200,17 @@ const DOM = {
   sendBtn: document.getElementById('sendBtn'),
 
   // Floating Hearts
-  floatingHearts: document.getElementById('floatingHearts')
+  floatingHearts: document.getElementById('floatingHearts'),
+
+  // Floating Action Menu & Toast
+  messageActionMenu: document.getElementById('messageActionMenu'),
+  menuSaveActionBtn: document.getElementById('menuSaveActionBtn'),
+  menuSaveIcon: document.getElementById('menuSaveIcon'),
+  menuSaveText: document.getElementById('menuSaveText'),
+  menuCopyActionBtn: document.getElementById('menuCopyActionBtn'),
+  actionToast: document.getElementById('actionToast'),
+  toastIcon: document.getElementById('toastIcon'),
+  toastMsg: document.getElementById('toastMsg')
 };
 
 // =============================================================================
@@ -708,7 +719,10 @@ function createMessageElement(msg) {
         img.src = url;
         img.alt = 'Private couple memory';
         img.loading = 'lazy';
-        img.onclick = () => openLightbox(url, msg);
+        img.onclick = () => {
+          if (Date.now() - state.lastHoldTriggerTime < 500) return;
+          openLightbox(url, msg);
+        };
         photoBox.appendChild(img);
       }
     });
@@ -724,19 +738,38 @@ function createMessageElement(msg) {
     bubble.appendChild(textNode);
   }
 
+  // If message is saved, attach subtle persistent romantic heart badge to bubble
+  if (msg.is_saved) {
+    const savedBadge = document.createElement('div');
+    savedBadge.className = 'message-saved-badge';
+    savedBadge.title = 'Saved memory • Click or hold to manage';
+    savedBadge.innerHTML = '<i data-lucide="heart" class="icon-xs" fill="currentColor"></i>';
+    savedBadge.onclick = (e) => {
+      e.stopPropagation();
+      openMessageActionMenu(msg, bubble);
+    };
+    bubble.appendChild(savedBadge);
+  }
+
+  // Setup Hold / Long-press listener for Save Options Menu
+  setupMessageHold(bubble, msg);
+
   bubbleWrapper.appendChild(bubble);
 
-  // Footer: Time, Expiration pill, Save button, Delete button
+  // Footer: (Static time, expiration pill, and static save button commented out)
   const footer = document.createElement('div');
   footer.className = 'message-footer';
 
-  // Timestamp
+  // Timestamp (Static timestamp commented out — revealed on Instagram-style right-to-left swipe instead)
+  /*
   const timeSpan = document.createElement('span');
   timeSpan.className = 'message-time';
   timeSpan.textContent = formatTime(msg.created_at);
   footer.appendChild(timeSpan);
+  */
 
-  // Expiration Indicator
+  // Expiration Indicator (Commented out — hidden during chat as requested)
+  /*
   const expSpan = document.createElement('span');
   expSpan.className = `expiration-badge ${msg.is_saved ? 'saved' : ''}`;
   expSpan.id = `exp-${msg.id}`;
@@ -744,14 +777,17 @@ function createMessageElement(msg) {
     ? '<i data-lucide="bookmark" class="icon-xs"></i> Saved'
     : `<i data-lucide="hourglass" class="icon-xs"></i> ${calculateTimeRemaining(msg.expires_at)}`;
   footer.appendChild(expSpan);
+  */
 
-  // Save / Bookmark Action Button
+  // Save / Bookmark Action Button (Static button commented out — hold on message bubble to open save options)
+  /*
   const saveBtn = document.createElement('button');
   saveBtn.className = `msg-action-btn ${msg.is_saved ? 'is-saved' : ''}`;
   saveBtn.title = msg.is_saved ? 'Unsave memory (restarts timer)' : 'Save memory permanently';
   saveBtn.innerHTML = `<i data-lucide="heart" class="icon-xs" ${msg.is_saved ? 'fill="currentColor"' : ''}></i>`;
   saveBtn.onclick = () => toggleSaveMessage(msg.id, msg.is_saved);
   footer.appendChild(saveBtn);
+  */
 
   // Delete Action Button (Disabled/Commented out)
   /*
@@ -763,8 +799,18 @@ function createMessageElement(msg) {
   footer.appendChild(deleteBtn);
   */
 
-  bubbleWrapper.appendChild(footer);
+  if (footer.children.length > 0) {
+    bubbleWrapper.appendChild(footer);
+  }
+
   row.appendChild(bubbleWrapper);
+
+  // Instagram-Style Swipe Timestamp (Reveals smoothly when dragging right-to-left)
+  const swipeTime = document.createElement('div');
+  swipeTime.className = 'message-swipe-timestamp';
+  swipeTime.textContent = formatTime(msg.created_at);
+  row.appendChild(swipeTime);
+
   return row;
 }
 
@@ -789,7 +835,11 @@ function scrollToBottom(smooth = true) {
 function formatTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
 }
 
 function calculateTimeRemaining(expiresAt) {
@@ -815,9 +865,6 @@ function startExpirationTicker() {
     state.messages.forEach(msg => {
       if (msg.is_saved) return;
 
-      const badge = document.getElementById(`exp-${msg.id}`);
-      if (!badge) return;
-
       const remainingMs = new Date(msg.expires_at).getTime() - now;
       if (remainingMs <= 0) {
         // Expired! Immediately remove from DOM
@@ -826,7 +873,10 @@ function startExpirationTicker() {
         if (row) row.remove();
         checkEmptyState();
       } else {
-        badge.innerHTML = `<i data-lucide="hourglass" class="icon-xs"></i> ${calculateTimeRemaining(msg.expires_at)}`;
+        const badge = document.getElementById(`exp-${msg.id}`);
+        if (badge) {
+          badge.innerHTML = `<i data-lucide="hourglass" class="icon-xs"></i> ${calculateTimeRemaining(msg.expires_at)}`;
+        }
       }
     });
     refreshLucideIcons();
@@ -1038,10 +1088,332 @@ function updateSendButtonState() {
 }
 
 // =============================================================================
+// INSTAGRAM-STYLE SWIPE TO REVEAL TIMESTAMP & HOLD-TO-SAVE MENU
+// =============================================================================
+let activeMenuMsg = null;
+let activeMenuBubble = null;
+let toastTimeout = null;
+
+function showActionToast(message, iconName = 'heart') {
+  if (!DOM.actionToast || !DOM.toastMsg) return;
+  DOM.toastMsg.textContent = message;
+  if (DOM.toastIcon) {
+    DOM.toastIcon.setAttribute('data-lucide', iconName);
+  }
+  refreshLucideIcons();
+  DOM.actionToast.style.display = 'flex';
+  DOM.actionToast.offsetHeight; // Force reflow
+  DOM.actionToast.classList.add('show');
+
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    DOM.actionToast.classList.remove('show');
+    setTimeout(() => {
+      DOM.actionToast.style.display = 'none';
+    }, 260);
+  }, 2200);
+}
+
+function openMessageActionMenu(msg, bubble) {
+  if (!DOM.messageActionMenu || !bubble) return;
+  activeMenuMsg = msg;
+  activeMenuBubble = bubble;
+
+  // Configure save button state
+  if (DOM.menuSaveText && DOM.menuSaveIcon) {
+    if (msg.is_saved) {
+      DOM.menuSaveText.textContent = 'Unsave Memory';
+      DOM.menuSaveIcon.setAttribute('data-lucide', 'heart-off');
+      DOM.menuSaveActionBtn.classList.add('unsave-mode');
+    } else {
+      DOM.menuSaveText.textContent = 'Save to Memories';
+      DOM.menuSaveIcon.setAttribute('data-lucide', 'heart');
+      DOM.menuSaveActionBtn.classList.remove('unsave-mode');
+    }
+  }
+
+  // Configure copy button state
+  if (DOM.menuCopyActionBtn) {
+    DOM.menuCopyActionBtn.style.display = (msg.body && msg.body.trim().length > 0) ? 'inline-flex' : 'none';
+  }
+
+  refreshLucideIcons();
+
+  // Position menu relative to bubble
+  const menu = DOM.messageActionMenu;
+  menu.style.display = 'block';
+  menu.style.visibility = 'hidden';
+
+  const rect = bubble.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 190;
+  const menuHeight = menu.offsetHeight || 44;
+
+  let top = rect.top - menuHeight - 10;
+  if (top < 65) {
+    top = rect.bottom + 10;
+  }
+
+  let left;
+  const isSent = bubble.closest('.message-row')?.classList.contains('sent');
+  if (isSent) {
+    left = rect.right - menuWidth;
+  } else {
+    left = rect.left;
+  }
+
+  const maxLeft = window.innerWidth - menuWidth - 12;
+  left = Math.max(12, Math.min(maxLeft, left));
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+  menu.style.visibility = 'visible';
+}
+
+function closeMessageActionMenu() {
+  if (DOM.messageActionMenu) {
+    DOM.messageActionMenu.style.display = 'none';
+  }
+  activeMenuMsg = null;
+  activeMenuBubble = null;
+}
+
+function initMessageActionMenu() {
+  if (DOM.menuSaveActionBtn) {
+    DOM.menuSaveActionBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!activeMenuMsg) return;
+      const msg = activeMenuMsg;
+      closeMessageActionMenu();
+      await toggleSaveMessage(msg.id, msg.is_saved);
+      showActionToast(msg.is_saved ? 'Memory unsaved' : 'Memory saved forever ❤️', msg.is_saved ? 'heart-crack' : 'heart');
+    });
+  }
+
+  if (DOM.menuCopyActionBtn) {
+    DOM.menuCopyActionBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!activeMenuMsg || !activeMenuMsg.body) return;
+      try {
+        await navigator.clipboard.writeText(activeMenuMsg.body);
+        showActionToast('Message copied to clipboard', 'copy');
+      } catch (err) {
+        showActionToast('Failed to copy', 'alert-circle');
+      }
+      closeMessageActionMenu();
+    });
+  }
+
+  // Dismiss on clicking outside
+  document.addEventListener('pointerdown', (e) => {
+    if (DOM.messageActionMenu && DOM.messageActionMenu.style.display !== 'none') {
+      if (!DOM.messageActionMenu.contains(e.target) && !e.target.closest('.message-saved-badge')) {
+        closeMessageActionMenu();
+      }
+    }
+  });
+
+  // Dismiss on chat scroll
+  if (DOM.chatContainer) {
+    DOM.chatContainer.addEventListener('scroll', () => {
+      if (DOM.messageActionMenu && DOM.messageActionMenu.style.display !== 'none') {
+        closeMessageActionMenu();
+      }
+    }, { passive: true });
+  }
+
+  // Dismiss on Escape
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMessageActionMenu();
+  });
+}
+
+function setupMessageHold(bubble, msg) {
+  let holdTimer = null;
+  let startX = 0;
+  let startY = 0;
+
+  const startHold = (e) => {
+    if (e.button && e.button !== 0) return;
+    if (e.touches && e.touches.length > 1) return;
+
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      state.lastHoldTriggerTime = Date.now();
+      bubble.classList.add('is-holding');
+      setTimeout(() => bubble.classList.remove('is-holding'), 200);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (v) {}
+      }
+      openMessageActionMenu(msg, bubble);
+    }, 450);
+  };
+
+  const cancelHold = (e) => {
+    if (e && (e.type === 'touchmove' || e.type === 'mousemove')) {
+      const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+      const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+      if (Math.hypot(currentX - startX, currentY - startY) > 8) {
+        clearTimeout(holdTimer);
+      }
+      return;
+    }
+    clearTimeout(holdTimer);
+  };
+
+  bubble.addEventListener('touchstart', startHold, { passive: true });
+  bubble.addEventListener('touchmove', cancelHold, { passive: true });
+  bubble.addEventListener('touchend', cancelHold, { passive: true });
+  bubble.addEventListener('touchcancel', cancelHold, { passive: true });
+
+  bubble.addEventListener('mousedown', startHold);
+  bubble.addEventListener('mousemove', cancelHold);
+  bubble.addEventListener('mouseup', cancelHold);
+  bubble.addEventListener('mouseleave', cancelHold);
+
+  // Right-click support on desktop
+  bubble.addEventListener('contextmenu', (e) => {
+    if (window.getSelection()?.toString()?.trim().length > 0) {
+      return;
+    }
+    e.preventDefault();
+    clearTimeout(holdTimer);
+    state.lastHoldTriggerTime = Date.now();
+    openMessageActionMenu(msg, bubble);
+  });
+}
+
+function initInstagramSwipeTimestamp() {
+  const container = DOM.chatContainer;
+  const feed = DOM.messagesFeed;
+  if (!container || !feed) return;
+
+  let startX = 0;
+  let startY = 0;
+  let isSwiping = false;
+  let directionLocked = false;
+  let isMouseDown = false;
+
+  const MAX_SWIPE = 72;
+
+  function handleStart(clientX, clientY) {
+    startX = clientX;
+    startY = clientY;
+    isSwiping = false;
+    directionLocked = false;
+    feed.style.transition = 'none';
+  }
+
+  function handleMove(clientX, clientY, e) {
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+
+    if (!directionLocked) {
+      if (Math.abs(dy) > 7 && Math.abs(dy) > Math.abs(dx)) {
+        directionLocked = true;
+        isSwiping = false;
+        return;
+      }
+      if (dx < -6 && Math.abs(dx) > Math.abs(dy)) {
+        directionLocked = true;
+        isSwiping = true;
+        closeMessageActionMenu();
+      }
+    }
+
+    if (isSwiping) {
+      if (e.cancelable) e.preventDefault();
+      const rawOffset = clientX - startX;
+
+      if (rawOffset < 0) {
+        let offset = rawOffset;
+        if (-offset > MAX_SWIPE) {
+          const extra = -offset - MAX_SWIPE;
+          offset = -(MAX_SWIPE + extra * 0.22);
+        }
+        feed.style.transform = `translateX(${offset}px)`;
+        const progress = Math.min(1, Math.abs(offset) / 35);
+        feed.style.setProperty('--swipe-opacity', progress);
+      } else {
+        feed.style.transform = 'translateX(0px)';
+        feed.style.setProperty('--swipe-opacity', '0');
+      }
+    }
+  }
+
+  function handleEnd() {
+    if (isSwiping) {
+      isSwiping = false;
+      feed.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      feed.style.transform = 'translateX(0px)';
+      feed.style.setProperty('--swipe-opacity', '0');
+      setTimeout(() => {
+        feed.style.transition = '';
+      }, 300);
+    }
+    directionLocked = false;
+    isMouseDown = false;
+    document.body.style.userSelect = '';
+  }
+
+  // Touch Events (Mobile)
+  container.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      handleStart(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) {
+      handleMove(e.touches[0].clientX, e.touches[0].clientY, e);
+    }
+  }, { passive: false });
+
+  container.addEventListener('touchend', handleEnd, { passive: true });
+  container.addEventListener('touchcancel', handleEnd, { passive: true });
+
+  // Mouse Events (Desktop)
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, input, textarea, a, .message-saved-badge, .message-action-menu')) return;
+    isMouseDown = true;
+    handleStart(e.clientX, e.clientY);
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isMouseDown) return;
+    if (!isSwiping && window.getSelection()?.toString()?.length > 0) {
+      isMouseDown = false;
+      return;
+    }
+    if (isSwiping) {
+      document.body.style.userSelect = 'none';
+    }
+    handleMove(e.clientX, e.clientY, e);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isMouseDown || isSwiping) {
+      handleEnd();
+    }
+  });
+}
+
+// =============================================================================
 // 10. SAVED MESSAGES (PERSISTENT SHARED SAVE)
 // =============================================================================
 async function toggleSaveMessage(messageId, currentlySaved) {
   if (!state.supabase) return;
+
+  // Optimistic UI update
+  const targetMsg = state.messages.get(messageId);
+  const previousState = targetMsg ? targetMsg.is_saved : currentlySaved;
+  if (targetMsg) {
+    targetMsg.is_saved = !currentlySaved;
+    handleUpdatedMessage(targetMsg);
+  }
 
   try {
     if (currentlySaved) {
@@ -1066,6 +1438,10 @@ async function toggleSaveMessage(messageId, currentlySaved) {
       if (error) throw error;
     }
   } catch (err) {
+    if (targetMsg) {
+      targetMsg.is_saved = previousState;
+      handleUpdatedMessage(targetMsg);
+    }
     alert('Save state update error: ' + err.message);
   }
 }
@@ -1404,6 +1780,10 @@ function setupEventListeners() {
       handleSendMessage();
     }
   });
+
+  // Instagram-style swipe timestamp & message hold menu
+  initInstagramSwipeTimestamp();
+  initMessageActionMenu();
 }
 
 // =============================================================================

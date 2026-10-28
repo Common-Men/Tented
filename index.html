@@ -676,6 +676,28 @@
     </div>
   </div>
 
+  <!-- ========================================================================= -->
+  <!-- 8. FLOATING MESSAGE ACTION MENU (HOLD / LONG PRESS MENU) -->
+  <!-- ========================================================================= -->
+  <div class="message-action-menu" id="messageActionMenu" style="display: none;">
+    <div class="message-action-menu-content">
+      <button type="button" class="msg-menu-item" id="menuSaveActionBtn">
+        <i data-lucide="heart" class="icon-sm" id="menuSaveIcon"></i>
+        <span id="menuSaveText">Save Memory</span>
+      </button>
+      <button type="button" class="msg-menu-item" id="menuCopyActionBtn" style="display: none;">
+        <i data-lucide="copy" class="icon-sm"></i>
+        <span>Copy Text</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast Notification for Actions -->
+  <div class="action-toast" id="actionToast" style="display: none;">
+    <i data-lucide="heart" class="icon-xs" id="toastIcon"></i>
+    <span id="toastMsg">Saved!</span>
+  </div>
+
   <!-- Application Logic (ES Module) -->
   <script type="module" src="./script.js"></script>
 
