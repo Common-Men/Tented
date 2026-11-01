@@ -846,12 +846,41 @@ html, body {
   box-shadow: 0 0 16px rgba(236, 72, 153, 0.4);
 }
 
-/* Sender Bubble */
+/* Sender Bubble (Default / Seen — Signature Radiant Rose-Purple Gradient) */
 .message-row.sent .message-bubble {
   background: var(--gradient-sender);
   color: var(--text-pure);
   border-bottom-right-radius: 4px;
+  border: 1px solid transparent;
   box-shadow: 0 4px 18px rgba(236, 72, 153, 0.28);
+  transition: background 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              transform var(--transition-fast);
+}
+
+/* Sender Bubble — Unread / Not yet seen by receiver (Distinct Twilight Violet Style) */
+.message-row.sent.unseen .message-bubble {
+  background: linear-gradient(135deg, #371a56 0%, #200f36 100%);
+  border: 1px solid rgba(192, 132, 252, 0.42);
+  color: #f3e8ff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 14px rgba(168, 85, 247, 0.16);
+}
+
+.message-row.sent.unseen .message-bubble:hover {
+  border-color: rgba(192, 132, 252, 0.65);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 18px rgba(168, 85, 247, 0.25);
+}
+
+/* Subtle bloom pulse animation when sender's message gets seen */
+@keyframes seenGlowBloom {
+  0% { transform: scale(0.98); }
+  50% { transform: scale(1.02); box-shadow: 0 0 24px rgba(236, 72, 153, 0.55); }
+  100% { transform: scale(1); }
+}
+
+.message-row.sent.just-seen .message-bubble {
+  animation: seenGlowBloom 0.65s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Receiver Bubble */
@@ -931,11 +960,11 @@ html, body {
 /* Instagram-Style Swipe-to-Reveal Timestamp */
 .message-swipe-timestamp {
   position: absolute;
-  right: -72px;
+  right: -98px;
   bottom: 8px;
-  width: 64px;
+  width: 90px;
   text-align: right;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   color: var(--text-dim);
   white-space: nowrap;

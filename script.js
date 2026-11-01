@@ -44,8 +44,34 @@ const state = {
   cameraFlash: false,
   pinInput: '',
   recentSnapUrl: null,
-  lastHoldTriggerTime: 0
+  lastHoldTriggerTime: 0,
+  seenMessageIds: new Set() // Set of message IDs confirmed seen/read
 };
+
+// Local storage cache helpers for seen status
+function getStoredSeenIds() {
+  try {
+    const raw = localStorage.getItem('tented_seen_message_ids');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistSeenIds(ids) {
+  try {
+    const stored = new Set(getStoredSeenIds());
+    ids.forEach(id => stored.add(id));
+    localStorage.setItem('tented_seen_message_ids', JSON.stringify(Array.from(stored)));
+  } catch (e) { }
+}
+
+function isMessageSeen(msg) {
+  if (!msg) return true;
+  if (msg.read_at) return true;
+  if (state.seenMessageIds.has(msg.id)) return true;
+  return false;
+}
 
 // =============================================================================
 // 2. DOM ELEMENTS
@@ -407,6 +433,7 @@ function handleUserLoggedOut() {
   state.partnerProfile = null;
   state.messages.clear();
   state.savedMessages.clear();
+  state.seenMessageIds.clear();
   state.signedUrlCache.clear();
   DOM.messagesFeed.innerHTML = '';
   state.targetView = 'auth';
@@ -520,6 +547,7 @@ async function loadInitialMessages() {
 
     state.messages.clear();
     state.savedMessages.clear();
+    getStoredSeenIds().forEach(id => state.seenMessageIds.add(id));
 
     const now = new Date();
     (messages || []).forEach(msg => {
@@ -531,11 +559,17 @@ async function loadInitialMessages() {
       if (msg.is_saved) {
         state.savedMessages.set(msg.id, msg);
       }
+      if (msg.read_at) {
+        state.seenMessageIds.add(msg.id);
+      }
     });
 
     renderAllMessages();
     updateSavedCountBadge();
     scrollToBottom(false);
+
+    // If active in sanctuary, mark unread partner messages as seen
+    markIncomingMessagesAsSeen();
 
     // Also run server-side expiration cleanup RPC safely
     await state.supabase.rpc('cleanup_expired_messages').catch(err => {
@@ -573,6 +607,13 @@ function setupRealtimeSubscription() {
     // 3. Presence Tracking (Online / Offline status)
     .on('presence', { event: 'sync' }, () => {
       handlePresenceSync();
+    })
+    // 4. Realtime Read Receipts Broadcast (Instant Seen Sync)
+    .on('broadcast', { event: 'messages_seen' }, payload => {
+      const data = payload?.payload || payload;
+      if (data?.message_ids && data.reader_id !== state.currentUser?.id) {
+        handleMessagesSeen(data.message_ids, data.seen_at);
+      }
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -617,6 +658,9 @@ function handleIncomingMessage(newMsg) {
   if (!newMsg || state.messages.has(newMsg.id)) return;
 
   state.messages.set(newMsg.id, newMsg);
+  if (newMsg.read_at) {
+    state.seenMessageIds.add(newMsg.id);
+  }
   if (newMsg.is_saved) {
     state.savedMessages.set(newMsg.id, newMsg);
     updateSavedCountBadge();
@@ -625,12 +669,21 @@ function handleIncomingMessage(newMsg) {
   appendMessageElement(newMsg);
   checkEmptyState();
   scrollToBottom(true);
+
+  // If received message is from partner, and I am actively viewing the sanctuary, mark it seen!
+  if (newMsg.sender_id !== state.currentUser?.id) {
+    markIncomingMessagesAsSeen();
+  }
 }
 
 function handleUpdatedMessage(updatedMsg) {
   if (!updatedMsg) return;
 
   state.messages.set(updatedMsg.id, updatedMsg);
+
+  if (updatedMsg.read_at) {
+    state.seenMessageIds.add(updatedMsg.id);
+  }
 
   if (updatedMsg.is_saved) {
     state.savedMessages.set(updatedMsg.id, updatedMsg);
@@ -672,6 +725,100 @@ function handleDeletedMessage(oldMsg) {
 }
 
 // =============================================================================
+// READ RECEIPTS & SEEN STATUS SYNCHRONIZATION
+// =============================================================================
+async function markIncomingMessagesAsSeen() {
+  if (!state.supabase || !state.currentUser || !state.isUnlocked) return;
+  // Only mark seen if app sanctuary view is currently active and tab is in foreground
+  if (DOM.appView.style.display !== 'flex' && DOM.appView.style.display !== 'block') return;
+  if (document.hidden) return;
+
+  const unreadPartnerMsgIds = [];
+  state.messages.forEach(msg => {
+    if (msg.sender_id !== state.currentUser.id && !msg.read_at && !state.seenMessageIds.has(msg.id)) {
+      unreadPartnerMsgIds.push(msg.id);
+    }
+  });
+
+  if (unreadPartnerMsgIds.length === 0) return;
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Mark in memory & local storage
+  unreadPartnerMsgIds.forEach(id => {
+    state.seenMessageIds.add(id);
+    const m = state.messages.get(id);
+    if (m) m.read_at = nowIso;
+  });
+  persistSeenIds(unreadPartnerMsgIds);
+
+  // 2. Broadcast immediately over Realtime channel so sender sees the color update in real-time
+  if (state.realtimeChannel) {
+    state.realtimeChannel.send({
+      type: 'broadcast',
+      event: 'messages_seen',
+      payload: {
+        reader_id: state.currentUser.id,
+        message_ids: unreadPartnerMsgIds,
+        seen_at: nowIso
+      }
+    }).catch(err => console.log('Realtime broadcast seen notice:', err));
+  }
+
+  // 3. Persist to Supabase Database (RPC or table update)
+  try {
+    const { error: rpcErr } = await state.supabase.rpc('mark_messages_read', {
+      p_message_ids: unreadPartnerMsgIds
+    });
+    if (rpcErr) {
+      await state.supabase
+        .from('messages')
+        .update({ read_at: nowIso })
+        .in('id', unreadPartnerMsgIds)
+        .catch(() => { });
+    }
+  } catch (dbErr) {
+    // Graceful fallback if database column is pending migration
+  }
+}
+
+function handleMessagesSeen(messageIds, seenAt) {
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+
+  const seenTime = seenAt || new Date().toISOString();
+  let updatedAny = false;
+
+  messageIds.forEach(id => {
+    state.seenMessageIds.add(id);
+    const msg = state.messages.get(id);
+    if (msg) {
+      msg.read_at = seenTime;
+    }
+
+    const row = document.getElementById(`msg-${id}`);
+    if (row && row.classList.contains('unseen')) {
+      row.classList.remove('unseen');
+      row.classList.add('just-seen');
+      setTimeout(() => {
+        if (row) row.classList.remove('just-seen');
+      }, 700);
+
+      const swipeTime = row.querySelector('.message-swipe-timestamp');
+      if (swipeTime && msg) {
+        swipeTime.textContent = formatTime(msg.created_at) + ' • Seen';
+      }
+      updatedAny = true;
+    }
+  });
+
+  persistSeenIds(messageIds);
+
+  if (updatedAny) {
+    refreshLucideIcons();
+  }
+}
+
+// =============================================================================
 // 7. MESSAGE RENDERING & FORMATTING
 // =============================================================================
 function renderAllMessages() {
@@ -688,9 +835,10 @@ function renderAllMessages() {
 }
 
 function createMessageElement(msg) {
-  const isSentByMe = msg.sender_id === state.currentUser.id;
+  const isSentByMe = msg.sender_id === state.currentUser?.id;
+  const isSeen = isMessageSeen(msg);
   const row = document.createElement('div');
-  row.className = `message-row ${isSentByMe ? 'sent' : 'received'}`;
+  row.className = `message-row ${isSentByMe ? 'sent' : 'received'}${isSentByMe && !isSeen ? ' unseen' : ''}`;
   row.id = `msg-${msg.id}`;
 
   const bubbleWrapper = document.createElement('div');
@@ -808,7 +956,8 @@ function createMessageElement(msg) {
   // Instagram-Style Swipe Timestamp (Reveals smoothly when dragging right-to-left)
   const swipeTime = document.createElement('div');
   swipeTime.className = 'message-swipe-timestamp';
-  swipeTime.textContent = formatTime(msg.created_at);
+  const seenStatus = isSentByMe ? (isSeen ? ' • Seen' : ' • Sent') : '';
+  swipeTime.textContent = formatTime(msg.created_at) + seenStatus;
   row.appendChild(swipeTime);
 
   return row;
@@ -1245,7 +1394,7 @@ function setupMessageHold(bubble, msg) {
       bubble.classList.add('is-holding');
       setTimeout(() => bubble.classList.remove('is-holding'), 200);
       if (navigator.vibrate) {
-        try { navigator.vibrate(40); } catch (v) {}
+        try { navigator.vibrate(40); } catch (v) { }
       }
       openMessageActionMenu(msg, bubble);
     }, 450);
@@ -1296,7 +1445,7 @@ function initInstagramSwipeTimestamp() {
   let directionLocked = false;
   let isMouseDown = false;
 
-  const MAX_SWIPE = 72;
+  const MAX_SWIPE = 96;
 
   function handleStart(clientX, clientY) {
     startX = clientX;
@@ -1781,6 +1930,12 @@ function setupEventListeners() {
     }
   });
 
+  // Mark incoming partner messages as seen on chat interaction
+  if (DOM.chatContainer) {
+    DOM.chatContainer.addEventListener('pointerdown', () => markIncomingMessagesAsSeen(), { passive: true });
+    DOM.chatContainer.addEventListener('scroll', () => markIncomingMessagesAsSeen(), { passive: true });
+  }
+
   // Instagram-style swipe timestamp & message hold menu
   initInstagramSwipeTimestamp();
   initMessageActionMenu();
@@ -1850,10 +2005,10 @@ function initCameraDisguise() {
   // Interactive Viewfinder Tap: Focus Ring
   if (DOM.cameraViewport) {
     DOM.cameraViewport.addEventListener('click', (e) => {
-      if (e.target.closest('.camera-top-bar') || 
-          e.target.closest('.camera-bottom-bar') || 
-          e.target.closest('.pin-modal-backdrop') || 
-          e.target.closest('.snap-preview-modal')) {
+      if (e.target.closest('.camera-top-bar') ||
+        e.target.closest('.camera-bottom-bar') ||
+        e.target.closest('.pin-modal-backdrop') ||
+        e.target.closest('.snap-preview-modal')) {
         return;
       }
       showFocusRing(e.clientX, e.clientY);
@@ -1979,12 +2134,16 @@ function initCameraDisguise() {
     });
   }
 
-  // Auto-lock when tab is hidden or minimized
+  // Auto-lock when tab is hidden or minimized, and sync seen messages on return
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       const autolock = localStorage.getItem('tented_autolock') !== 'false';
       if (autolock && state.isUnlocked) {
         lockToCamera();
+      }
+    } else {
+      if (state.isUnlocked && DOM.appView && DOM.appView.style.display !== 'none') {
+        markIncomingMessagesAsSeen();
       }
     }
   });
@@ -2031,7 +2190,7 @@ async function startCameraStream() {
 function stopCameraStream() {
   if (state.cameraStream) {
     state.cameraStream.getTracks().forEach(track => {
-      try { track.stop(); } catch (e) {}
+      try { track.stop(); } catch (e) { }
     });
     state.cameraStream = null;
   }
@@ -2186,7 +2345,7 @@ function playShutterSound() {
     oscGain.connect(ctx.destination);
     osc.start(ctx.currentTime + 0.038);
     osc.stop(ctx.currentTime + 0.08);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function playUnlockChime() {
@@ -2207,7 +2366,7 @@ function playUnlockChime() {
       osc.start(startTime);
       osc.stop(startTime + 0.25);
     });
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // PIN Verification Functions
@@ -2339,6 +2498,7 @@ function showView(view) {
     if (DOM.cameraView) DOM.cameraView.style.display = 'none';
     if (DOM.authView) DOM.authView.style.display = 'none';
     if (DOM.appView) DOM.appView.style.display = 'flex';
+    markIncomingMessagesAsSeen();
   }
   refreshLucideIcons();
 }

@@ -33,6 +33,7 @@ Tented️ is an exclusive, ultra-private couple chat web application built for t
 | **Phase 10**| Documentation, Supabase Setup & Vercel Deployment Guide | `COMPLETED` |
 | **Phase 11**| Camera Stealth Disguise & Secret PIN Verification | `COMPLETED` |
 | **Phase 12**| PWA WebAPK & Stealth Mobile Installation Support | `COMPLETED` |
+| **Phase 13**| Message Seen/Read Receipts & Realtime Unseen Styling | `COMPLETED` |
 
 ---
 
@@ -278,3 +279,27 @@ Tented️ is an exclusive, ultra-private couple chat web application built for t
   - Verified manifest.json syntax and icon mappings.
   - Verified Service Worker script syntax and event handlers.
 - **Remaining Tasks:** None. Ready for WebAPK installation via Chrome and PWABuilder APK packaging.
+
+---
+
+### Phase 13: Message Seen/Read Receipts & Realtime Unseen Styling
+- **Status:** `COMPLETED`
+- **Tasks Completed:**
+  - Preserved 100% of the existing romantic dark aesthetic, camera disguise, and gestures without altering or removing existing features.
+  - Implemented distinct twilight violet styling for sent messages that have not yet been seen/read by the receiver (`.message-row.sent.unseen .message-bubble`).
+  - Implemented smooth bloom transition from unseen to the normal signature radiant rose-purple gradient (`--gradient-sender`) as soon as the partner sees the message.
+  - Built Realtime Broadcast synchronization (`messages_seen`) on the `tented-couple-sanctuary` channel for instantaneous live feedback across screens.
+  - Implemented local persistent caching (`tented_seen_message_ids`) to preserve seen states across reloads.
+  - Created database migration `supabase/migrations/20261101000000_message_read_receipts.sql` with `read_at` timestamp, index, secure RPC `mark_messages_read()`, and RLS policy updates.
+  - Added seen/sent indicators to the Instagram-style swipe timestamp (`• Sent` vs `• Seen`).
+- **Files Created/Modified:**
+  - `style.css` (modified)
+  - `script.js` (modified)
+  - `supabase/migrations/20261101000000_message_read_receipts.sql` (created)
+  - `supabase/migrations/20261016000000_tented_schema.sql` (modified)
+  - `PROJECT_TRACKER.md` (modified)
+- **Tests Performed:**
+  - Validated syntax and bracket balance across JavaScript and CSS files.
+  - Verified local server response (HTTP 200 OK).
+  - Verified seen state transitions, realtime broadcast listener, and persistence fallbacks.
+- **Remaining Tasks:** None.

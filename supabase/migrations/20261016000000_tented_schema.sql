@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL,
     is_saved BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at TIMESTAMPTZ DEFAULT NULL,
     CONSTRAINT chk_message_content CHECK (body IS NOT NULL OR image_path IS NOT NULL)
 );
 
@@ -88,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(created_at
 CREATE INDEX IF NOT EXISTS idx_messages_expires_at ON public.messages(expires_at) WHERE is_saved = FALSE;
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON public.messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_is_saved ON public.messages(is_saved);
+CREATE INDEX IF NOT EXISTS idx_messages_read_at ON public.messages(read_at) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_message_saves_msg ON public.message_saves(message_id);
 CREATE INDEX IF NOT EXISTS idx_message_saves_user ON public.message_saves(saved_by);
 CREATE INDEX IF NOT EXISTS idx_photo_queue_status ON public.expired_photo_queue(status) WHERE status = 'pending';
@@ -378,10 +380,37 @@ CREATE POLICY "messages_delete_allowed"
     ON public.messages FOR DELETE
     USING (public.is_couple_member(auth.uid()));
 
--- Updates to messages are disabled from client (save state is managed via message_saves)
-CREATE POLICY "messages_update_denied"
+-- Updates to messages: Allow partner to mark messages as read
+DROP POLICY IF EXISTS "messages_update_denied" ON public.messages;
+DROP POLICY IF EXISTS "messages_update_read" ON public.messages;
+CREATE POLICY "messages_update_read"
     ON public.messages FOR UPDATE
-    USING (FALSE);
+    USING (
+        public.is_couple_member(auth.uid())
+        AND sender_id != auth.uid()
+    )
+    WITH CHECK (
+        public.is_couple_member(auth.uid())
+        AND sender_id != auth.uid()
+    );
+
+-- 8.3.1 Function to safely mark partner messages read
+CREATE OR REPLACE FUNCTION public.mark_messages_read(p_message_ids UUID[])
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    UPDATE public.messages
+    SET read_at = now()
+    WHERE id = ANY(p_message_ids)
+      AND sender_id != auth.uid()
+      AND read_at IS NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.mark_messages_read(UUID[]) TO authenticated;
 
 -- 8.4 message_saves Policies:
 CREATE POLICY "saves_select_allowed"
